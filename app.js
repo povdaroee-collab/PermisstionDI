@@ -43,6 +43,9 @@ let userSearchInput, userDropdown, userSearchError, scanFaceBtn, modelStatusEl, 
 // === NEW ANNOUNCEMENT ELEMENTS ===
 let announcementModal, announcementMessage, announcementCloseBtn;
 
+// === NEW AGREEMENT ELEMENTS ===
+let agreementModal, agreementTitle, agreementMessage, agreementCheckbox, agreementAgreeBtn, agreementCancelBtn;
+
 // === NEW APPROVER ELEMENTS ===
 let openApproverDashboardBtn, approverSection, closeApproverDashboardBtn, approverTabPending, approverTabHistory, approverContainerPending, approverContainerHistory, pendingCountEl;
 
@@ -94,6 +97,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     announcementModal = document.getElementById('announcement-modal');
     announcementMessage = document.getElementById('announcement-message');
     announcementCloseBtn = document.getElementById('announcement-close-btn');
+
+    // === NEW AGREEMENT ELEMENTS ===
+    agreementModal = document.getElementById('agreement-modal');
+    agreementTitle = document.getElementById('agreement-title');
+    agreementMessage = document.getElementById('agreement-message');
+    agreementCheckbox = document.getElementById('agreement-checkbox');
+    agreementAgreeBtn = document.getElementById('agreement-agree-btn');
+    agreementCancelBtn = document.getElementById('agreement-cancel-btn');
     
     // === MODIFIED: REMOVED 'page-daily-attendance' ===
     pages = ['page-home', 'page-history', 'page-account', 'page-help', 'page-request-leave', 'page-request-out', 'page-approver']; 
@@ -111,6 +122,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     // === END: NEW Announcement Listener ===
     
+    // === NEW: Agreement Modal Listeners ===
+    if (agreementCancelBtn) {
+        agreementCancelBtn.addEventListener('click', () => {
+            if (agreementModal) agreementModal.classList.add('hidden');
+        });
+    }
+    if (agreementCheckbox) {
+        agreementCheckbox.addEventListener('change', () => {
+            if (agreementAgreeBtn) {
+                agreementAgreeBtn.disabled = !agreementCheckbox.checked;
+            }
+        });
+    }
+    if (agreementAgreeBtn) {
+        agreementAgreeBtn.addEventListener('click', () => {
+            const type = agreementAgreeBtn.dataset.type;
+            if (agreementModal) agreementModal.classList.add('hidden');
+            
+            if (type === 'leave') {
+                openLeaveForm(); // ហៅ Function ថ្មី
+            } else if (type === 'out') {
+                openOutForm(); // ហៅ Function ថ្មី
+            }
+        });
+    }
+    // === END: NEW Agreement Modal Listeners ===
+
     // === MODIFIED: History Page Listeners (Moved Tap Handler to Requests.js) ===
     if (historyContent) { 
         historyContent.addEventListener('touchstart', handleTouchStart, false); 
@@ -240,7 +278,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } 
         if(loginPage) loginPage.classList.add('hidden'); 
     }
-    // --- Main App Logic ---
+// --- Main App Logic ---
     function initializeAppFlow() { 
         console.log("initializeAppFlow called (for non-remembered user)."); 
         console.log("Fetching users for initial login..."); 
@@ -480,12 +518,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         const ANNOUNCEMENT_MESSAGE = "សួស្ដីប្អូបនៗទាំងអស់គ្នា ថ្ងៃទី០៩ វិច្ឆការ ២០២៥ នេះជាថ្ងៃនៃពិធីបុណ្យឯករាជ្យជាតិ ខួបលើកទី ៧២ ដែលខាងសាលាមានការឈប់សម្រាកសិក្សា ដូច្នោះការងារក្នុង DI ប្អូនៗត្រូវវេនធ្វើការពេលយប់ត្រូវប្ដូរវេនមកធ្វើការពេលថ្ងៃ ដោយឡែកពេលយប់ DI ត្រូវបិទ។ សូមអរគុណ!!!";
         
         // បានលុប 'hasRead' check ដើម្បីឱ្យវាបង្ហាញរាល់ពេល
+         // (Hide this logic if you want to show it every time)
         if (announcementModal) { 
             console.log(`Showing announcement: ${ANNOUNCEMENT_ID}`);
             if (announcementMessage) announcementMessage.textContent = ANNOUNCEMENT_MESSAGE;
             if (announcementCloseBtn) announcementCloseBtn.dataset.announcementId = ANNOUNCEMENT_ID;
             announcementModal.classList.remove('hidden');
         }
+        
         // === END: NEW ANNOUNCEMENT LOGIC ===
 
         currentUser = user; 
@@ -617,12 +657,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (historyContent) historyContent.scrollTop = 0; 
     }
     // === END: MODIFIED History Page Tabs & Swipe ===
-    
-    if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistoryTab('leave'));
+if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistoryTab('leave'));
     if (historyTabOut) historyTabOut.addEventListener('click', () => showHistoryTab('out'));
     function handleTouchStart(evt) { const firstTouch = evt.touches[0]; touchstartX = firstTouch.clientX; isSwiping = true; }
     function handleTouchMove(evt) { if (!isSwiping) return; const touch = evt.touches[0]; touchendX = touch.clientX; }
     function handleTouchEnd(evt) { if (!isSwiping) return; isSwiping = false; const threshold = 50; const swipedDistance = touchendX - touchstartX; if (Math.abs(swipedDistance) > threshold) { if (swipedDistance < 0) { console.log("Swiped Left"); showHistoryTab('out', true); } else { console.log("Swiped Right"); showHistoryTab('leave', true); } } else { console.log("Swipe distance too short or vertical scroll."); } touchstartX = 0; touchendX = 0; }
+
     // === START: NEW APPROVER PAGE LOGIC ===
     let currentApproverTab = 'pending';
     function showApproverTab(tabName) {
@@ -682,14 +722,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         } 
     }
 
-    // === START: NEW Validation Functions ===
+    // === START: NEW Validation Functions (With "ទៅ" check) ===
     function validateLeaveForm() {
-        // ពិនិត្យមើលថា "រយៈពេល" ត្រូវបានជ្រើសរើស (មិនមែន null)
         const isDurationValid = !!selectedLeaveDuration;
-        // ពិនិត្យមើលថា "មូលហេតុ" មិនទទេ (ព្រោះវាអនុញ្ញាតឱ្យ custom)
-        const isReasonValid = selectedLeaveReason && selectedLeaveReason.trim() !== '';
+        const currentReason = selectedLeaveReason || ''; // យក Reason បច្ចុប្បន្ន
+        
+        let isReasonValid = true;
+        let reasonErrorMessage = ""; // សារ Error
 
-        // បង្ហាញប៊ូតុង លុះត្រាតែ ទាំងពីរត្រឹមត្រូវ
+        // 1. ពិនិត្យមើលថា "មូលហេតុ" មិនទទេ
+        if (!currentReason || currentReason.trim() === '') {
+            isReasonValid = false;
+            reasonErrorMessage = ""; // មិនបាច់បង្ហាញ Error បើគ្រាន់តែទទេ (ប៊ូតុងនឹងមិនបង្ហាញ)
+        } 
+        // 2. (NEW) ពិនិត្យមើលពាក្យ "ទៅ"
+        else if (currentReason.includes("ទៅ")) {
+            isReasonValid = false;
+            reasonErrorMessage = 'សូមលោកអ្នកពិនិត្យមើល "មូលហេតុ"ឡើងវិញ!!!';
+        }
+
+        // បង្ហាញ ឬ លាក់ សារ Error សម្រាប់ "មូលហេតុ"
+        if (!isReasonValid && reasonErrorMessage) {
+            // បង្ហាញ Error
+            if (leaveRequestErrorEl) {
+                leaveRequestErrorEl.textContent = reasonErrorMessage;
+                leaveRequestErrorEl.classList.remove('hidden');
+            }
+        } else {
+            // លាក់ Error (ប្រសិនបើវា Valid ឬ គ្រាន់តែទទេ)
+            if (leaveRequestErrorEl) {
+                leaveRequestErrorEl.classList.add('hidden');
+            }
+        }
+
+        // បង្ហាញ/លាក់ប៊ូតុង (ត្រូវតែ Valid ទាំងពីរ)
         animateSubmitButton(submitLeaveRequestBtn, isDurationValid && isReasonValid);
     }
 
@@ -700,11 +766,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         animateSubmitButton(submitOutRequestBtn, isDurationValid && isReasonValid);
     }
     // === END: NEW Validation Functions ===
-    
-    // --- Request Form Event Listeners (Calling Requests.js) ---
-    if (openLeaveRequestBtn) openLeaveRequestBtn.addEventListener('click', () => { 
+
+    // === START: REFACTORED Form Openers ===
+    function openLeaveForm() {
         if (!currentUser) return showCustomAlert("Error", "សូម Login ជាមុនសិន។"); 
-        
+    
         // Populate user info in form
         document.getElementById('request-leave-user-photo').src = currentUser.photo || 'https://placehold.co/60x60/e2e8f0/64748b?text=User';
         document.getElementById('request-leave-user-name').textContent = currentUser.name;
@@ -721,14 +787,44 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (leaveRequestErrorEl) leaveRequestErrorEl.classList.add('hidden'); 
         if (leaveRequestLoadingEl) leaveRequestLoadingEl.classList.add('hidden'); 
         
-        // === MODIFICATION (Hide button on open) ===
         if (submitLeaveRequestBtn) {
              submitLeaveRequestBtn.disabled = false; 
              animateSubmitButton(submitLeaveRequestBtn, false); // លាក់ប៊ូតុងពេលបើកទំព័រ
         }
-        // === END MODIFICATION ===
 
-        navigateTo('page-request-leave'); 
+        navigateTo('page-request-leave');
+    }
+
+    function openOutForm() {
+        if (!currentUser) return showCustomAlert("Error", "សូម Login ជាមុនសិន។"); 
+    
+        document.getElementById('request-out-user-photo').src = currentUser.photo || 'https://placehold.co/60x60/e2e8f0/64748b?text=User';
+        document.getElementById('request-out-user-name').textContent = currentUser.name;
+        document.getElementById('request-out-user-id').textContent = currentUser.id;
+        
+        // FIX (ប្រើ ID ត្រឹមត្រូវពី HTML)
+        document.getElementById('request-leave-user-department').textContent = currentUser.department || 'មិនមាន';
+        
+        if (outDurationSearchInput) outDurationSearchInput.value = ''; 
+        if (outReasonSearchInput) outReasonSearchInput.value = ''; 
+        if (outDateInput) outDateInput.value = Utils.getTodayString('dd/mm/yyyy'); 
+        selectedOutDuration = null; 
+        selectedOutReason = null; 
+        if (outRequestErrorEl) outRequestErrorEl.classList.add('hidden'); 
+        if (outRequestLoadingEl) outRequestLoadingEl.classList.add('hidden'); 
+        
+        if (submitOutRequestBtn) {
+            submitOutRequestBtn.disabled = false; 
+            animateSubmitButton(submitOutRequestBtn, false); // លាក់ប៊ូតុងពេលបើកទំព័រ
+        }
+        
+        navigateTo('page-request-out');
+    }
+    // === END: REFACTORED Form Openers ===
+    
+    // --- Request Form Event Listeners (Calling Requests.js) ---
+    if (openLeaveRequestBtn) openLeaveRequestBtn.addEventListener('click', () => { 
+        showAgreementModal('leave'); // គ្រាន់តែហៅ Modal
     });
     
     if (cancelLeaveRequestBtn) cancelLeaveRequestBtn.addEventListener('click', () => navigateTo('page-home'));
@@ -736,6 +832,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (submitLeaveRequestBtn) submitLeaveRequestBtn.addEventListener('click', () => {
         selectedLeaveDuration = leaveDurations.includes(leaveDurationSearchInput.value) ? leaveDurationSearchInput.value : null; 
         selectedLeaveReason = leaveReasonSearchInput.value;
+
+        // === START: NEW VALIDATION RULE (Safety Net) ===
+        if (selectedLeaveReason && selectedLeaveReason.includes("ទៅ")) {
+            if (leaveRequestErrorEl) {
+                leaveRequestErrorEl.textContent = 'សូមលោកអ្នកពិនិត្យមើល "មូលហេតុ"ឡើងវិញ!!!';
+                leaveRequestErrorEl.classList.remove('hidden');
+            }
+            return; // បញ្ឈប់ការ Submit
+        }
+        // === END: NEW VALIDATION RULE ===
+
         Requests.submitLeaveRequest(
             db, 
             auth, 
@@ -748,33 +855,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     if (openOutRequestBtn) openOutRequestBtn.addEventListener('click', () => { 
-        if (!currentUser) return showCustomAlert("Error", "សូម Login ជាមុនសិន។"); 
-        
-        document.getElementById('request-out-user-photo').src = currentUser.photo || 'https://placehold.co/60x60/e2e8f0/64748b?text=User';
-        document.getElementById('request-out-user-name').textContent = currentUser.name;
-        document.getElementById('request-out-user-id').textContent = currentUser.id;
-        
-        // === START: FIX (កែបញ្ហា Crash) ===
-        // ប្រើ ID 'request-leave-user-department' ឱ្យដូចអ្វីដែលមានក្នុង HTML របស់អ្នក
-        document.getElementById('request-leave-user-department').textContent = currentUser.department || 'មិនមាន';
-        // === END: FIX ===
-        
-        if (outDurationSearchInput) outDurationSearchInput.value = ''; 
-        if (outReasonSearchInput) outReasonSearchInput.value = ''; 
-        if (outDateInput) outDateInput.value = Utils.getTodayString('dd/mm/yyyy'); 
-        selectedOutDuration = null; 
-        selectedOutReason = null; 
-        if (outRequestErrorEl) outRequestErrorEl.classList.add('hidden'); 
-        if (outRequestLoadingEl) outRequestLoadingEl.classList.add('hidden'); 
-        
-        // === MODIFICATION (Hide button on open) ===
-        if (submitOutRequestBtn) {
-            submitOutRequestBtn.disabled = false; 
-            animateSubmitButton(submitOutRequestBtn, false); // លាក់ប៊ូតុងពេលបើកទំព័រ
-        }
-        // === END MODIFICATION ===
-        
-        navigateTo('page-request-out'); 
+        showAgreementModal('out'); // គ្រាន់តែហៅ Modal
     });
     
     if (cancelOutRequestBtn) cancelOutRequestBtn.addEventListener('click', () => navigateTo('page-home'));
@@ -797,6 +878,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Custom Alert Modal Logic ---
     function showCustomAlert(title, message, type = 'warning') { if (!customAlertModal) return; if (customAlertTitle) customAlertTitle.textContent = title; if (customAlertMessage) customAlertMessage.textContent = message; if (type === 'success') { if (customAlertIconSuccess) customAlertIconSuccess.classList.remove('hidden'); if (customAlertIconWarning) customAlertIconWarning.classList.add('hidden'); } else { if (customAlertIconSuccess) customAlertIconSuccess.classList.add('hidden'); if (customAlertIconWarning) customAlertIconWarning.classList.remove('hidden'); } customAlertModal.classList.remove('hidden'); }
     function hideCustomAlert() { if (customAlertModal) customAlertModal.classList.add('hidden'); }
+
+    // === START: NEW AGREEMENT MODAL LOGIC ===
+    const agreementMessages = {
+        leave: {
+            title: "សុំច្បាប់ឈប់សម្រាក",
+            message: "ការស្នើសុំច្បាប់ឈប់សម្រាកគឺអាចធ្វើបានពីចម្ងាយ (ឌីជីថលពេញលេញ) និងអនុញ្ញាតសម្រាប់តែនិស្សិតហាត់ការធ្វើការក្នុងអគារ DI តែប៉ុណ្ណោះ។"
+        },
+        out: {
+            title: "សុំច្បាប់ចេញក្រៅ",
+            // យើងប្រើ .innerHTML សម្រាប់อันนี้ ដូច្នេះយើងអាចប្រើ <ul>
+            message: `ការស្នើសុំច្បាប់ចេញក្រៅតម្រូវឱ្យអ្នកមកបង្ហាញខ្លួន និងសុំការអនុញ្ញាតដោយផ្ទាល់នៅអគារ B ជាមុនសិន ទើបសំណើររបស់អ្នកត្រូវបានត្រួតពិនិត្យ និងអនុម័ត។
+<br><br>បើពុំដូច្នោះទេ សំណើររបស់អ្នកនឹងត្រូវបានបដិសេធដោយស្វ័យប្រវត្តិ ឬត្រូវបានលុបចោល។
+<br><br><hr class="my-2">
+<b class="font-semibold text-gray-700">អ្នកដែលមានសិទ្ធិអនុញ្ញាត៖</b>
+<ul class="list-disc list-inside mt-1 pl-2 text-sm">
+    <li>លោកគ្រូ ពៅ ដារ៉ូ</li>
+    <li>លោកគ្រូ ខេង ភក្ដី</li>
+    <li>ក្រុមការងារពិសេស (ជំនួយការ)</li>
+</ul>
+<br><b class="font-semibold text-gray-700 mt-2 block">បញ្ជាក់៖</b> សម្រាប់ច្បាប់ចេញក្រៅគឺអនុញ្ញាតសម្រាប់និស្សិតទូទៅ។`
+        }
+    };
+
+    function showAgreementModal(type) {
+        if (!agreementModal || !agreementMessages[type]) return;
+
+        const content = agreementMessages[type];
+
+        if (agreementTitle) agreementTitle.textContent = content.title;
+        
+        // ប្រើ .innerHTML សម្រាប់ 'out' (ព្រោះមាន HTML) និង .textContent សម្រាប់ 'leave'
+        if (type === 'out') {
+             if (agreementMessage) agreementMessage.innerHTML = content.message;
+        } else {
+             if (agreementMessage) agreementMessage.textContent = content.message;
+        }
+
+        if (agreementCheckbox) agreementCheckbox.checked = false;
+        if (agreementAgreeBtn) {
+            agreementAgreeBtn.disabled = true;
+            agreementAgreeBtn.dataset.type = type; // រក្សាទុក Type
+        }
+        
+        agreementModal.classList.remove('hidden');
+    }
+    // === END: NEW AGREEMENT MODAL LOGIC ===
 
     // === START: NEW Animation Function ===
     /**
