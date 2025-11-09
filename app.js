@@ -519,12 +519,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // បានលុប 'hasRead' check ដើម្បីឱ្យវាបង្ហាញរាល់ពេល
          // (Hide this logic if you want to show it every time)
-        if (announcementModal) { 
-            console.log(`Showing announcement: ${ANNOUNCEMENT_ID}`);
-            if (announcementMessage) announcementMessage.textContent = ANNOUNCEMENT_MESSAGE;
-            if (announcementCloseBtn) announcementCloseBtn.dataset.announcementId = ANNOUNCEMENT_ID;
-            announcementModal.classList.remove('hidden');
-        }
+        // if (announcementModal) { 
+        //     console.log(`Showing announcement: ${ANNOUNCEMENT_ID}`);
+        //     if (announcementMessage) announcementMessage.textContent = ANNOUNCEMENT_MESSAGE;
+        //     if (announcementCloseBtn) announcementCloseBtn.dataset.announcementId = ANNOUNCEMENT_ID;
+        //     announcementModal.classList.remove('hidden');
+        // }
         
         // === END: NEW ANNOUNCEMENT LOGIC ===
 
