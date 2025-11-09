@@ -116,7 +116,7 @@ export async function submitLeaveRequest(db, auth, currentUser, data, dates, ele
         await sendTelegramNotification(message); 
         
         if (loadingEl) loadingEl.classList.add('hidden'); 
-        showCustomAlert('ជោគជ័យ!', 'សំណើរបស់អ្នកត្រូវបានផ្ញើដោយជោគជ័យ!', 'success'); 
+        showCustomAlert('ជោគជ័យ!', 'សំណើរបស់អ្នកត្រូវបានផ្ញើទៅគណៈគ្រប់គ្រងត្រួតពិនិត្យ! សូមរង់ចាំការសម្រេចអនុម័តសំណើរ!', 'success'); 
         navigateTo('page-history'); 
     } catch (error) { 
         console.error("Error submitting leave request:", error); 
