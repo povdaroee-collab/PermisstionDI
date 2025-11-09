@@ -895,7 +895,7 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
 <ul class="list-disc list-inside mt-1 pl-2 text-sm">
     <li>លោកគ្រូ ពៅ ដារ៉ូ</li>
     <li>លោកគ្រូ ខេង ភក្ដី</li>
-    <li>ក្រុមការងារពិសេស (ជំនួយការ)</li>
+    <li>ក្រុមការងារពិសេស (ជំនួយការ លោកគ្រូ ពៅ ដារ៉ូ)</li>
 </ul>
 <br><b class="font-semibold text-gray-700 mt-2 block">បញ្ជាក់៖</b> សម្រាប់ច្បាប់ចេញក្រៅគឺអនុញ្ញាតសម្រាប់និស្សិតទូទៅ។`
         }
