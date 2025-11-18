@@ -515,16 +515,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 1. កំណត់ ID សម្រាប់សារនេះ
         const ANNOUNCEMENT_ID = 'announcement_09112025_independence_day';
         // 2. ដាក់សាររបស់អ្នកនៅទីនេះ
-        const ANNOUNCEMENT_MESSAGE = "សួស្ដីប្អូបនៗទាំងអស់គ្នា ថ្ងៃទី០៩ វិច្ឆការ ២០២៥ នេះជាថ្ងៃនៃពិធីបុណ្យឯករាជ្យជាតិ ខួបលើកទី ៧២ ដែលខាងសាលាមានការឈប់សម្រាកសិក្សា ដូច្នោះការងារក្នុង DI ប្អូនៗត្រូវវេនធ្វើការពេលយប់ត្រូវប្ដូរវេនមកធ្វើការពេលថ្ងៃ ដោយឡែកពេលយប់ DI ត្រូវបិទ។ សូមអរគុណ!!!";
+        const ANNOUNCEMENT_MESSAGE = "គណនីរបស់លោកអ្នកមិនមានទឹកប្រាក់គ្រប់គ្រាន់ទេ!!!";
         
         // បានលុប 'hasRead' check ដើម្បីឱ្យវាបង្ហាញរាល់ពេល
          // (Hide this logic if you want to show it every time)
-        // if (announcementModal) { 
-        //     console.log(`Showing announcement: ${ANNOUNCEMENT_ID}`);
-        //     if (announcementMessage) announcementMessage.textContent = ANNOUNCEMENT_MESSAGE;
-        //     if (announcementCloseBtn) announcementCloseBtn.dataset.announcementId = ANNOUNCEMENT_ID;
-        //     announcementModal.classList.remove('hidden');
-        // }
+        if (announcementModal) { 
+            console.log(`Showing announcement: ${ANNOUNCEMENT_ID}`);
+            if (announcementMessage) announcementMessage.textContent = ANNOUNCEMENT_MESSAGE;
+            if (announcementCloseBtn) announcementCloseBtn.dataset.announcementId = ANNOUNCEMENT_ID;
+            announcementModal.classList.remove('hidden');
+        }
         
         // === END: NEW ANNOUNCEMENT LOGIC ===
 
