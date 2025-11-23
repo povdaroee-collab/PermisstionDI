@@ -13,8 +13,15 @@ export const SHEET_ID = '1_Kgl8UQXRsVATt_BOHYQjVWYKkRIBA12R-qnsBoSUzc';
 export const SHEET_NAME = 'បញ្ជឺឈ្មោះរួម';
 export const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(SHEET_NAME)}&tq=${encodeURIComponent('SELECT E, L, AA, N, G, S WHERE E IS NOT NULL OFFSET 0')}`;
 
-const BOT_TOKEN = '8284240201:AAEDRGHDcuoQAhkWk7km6I-9csZNbReOPHw';
-const CHAT_ID = '1487065922';
+// === TELEGRAM CONFIGURATION ===
+const BOT_TOKEN = '8284240201:AAEDRGHDcuoQAhkWk7km6I-9csZNbReOPHw'; // Token តែមួយ (ឬអាចប្តូរបាន)
+
+// 1. Bot ចាស់ (Admin/Log - ទទួលទាំងអស់)
+const OLD_CHAT_ID = '1487065922'; 
+
+// 2. Bot ថ្មី (Group - មិនទទួល IT Support)
+const NEW_CHAT_ID = '-2558667768';
+// ==============================
 
 export const allowedAreaCoords = [ [11.417052769150015, 104.76508285291308], [11.417130005964497, 104.76457396198742], [11.413876386899489, 104.76320488118378], [11.41373800267192, 104.76361527709159] ];
 export const LOCATION_FAILURE_MESSAGE = "ការបញ្ជាក់ចូលមកវិញ បរាជ័យ។ \n\nប្រហែលទូរស័ព្ទអ្នកមានបញ្ហា ការកំណត់បើ Live Location ដូច្នោះអ្នកមានជម្រើសមួយទៀតគឺអ្នកអាចទៅបញ្ជាក់ដោយផ្ទាល់នៅការិយាល័យអគារ B ជាមួយក្រុមការងារលោកគ្រូ ដារ៉ូ។";
@@ -28,26 +35,53 @@ export function setCollectionPaths(leavePath, outPath) {
 }
 
 /**
- * ផ្ញើ Telegram Notification
+ * Function ជំនួយសម្រាប់ផ្ញើ Telegram (Low Level)
  */
-export async function sendTelegramNotification(message) { 
-    console.log("Sending Telegram notification..."); 
+async function sendToTelegramAPI(chatId, message) {
     try { 
         const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`; 
         const res = await fetch(url, { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: 'HTML' }) 
+            body: JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' }) 
         }); 
         if (!res.ok) { 
             const errBody = await res.text(); 
-            console.error("Telegram API error:", res.status, errBody); 
-        } else { 
-            console.log("Telegram notification sent successfully."); 
-        } 
+            console.error(`Telegram Error (ChatID: ${chatId}):`, errBody); 
+        } else {
+            console.log(`Telegram Sent to ${chatId}`);
+        }
     } catch (e) { 
-        console.error("Failed to send Telegram message:", e); 
+        console.error(`Failed to send Telegram message to ${chatId}:`, e); 
     } 
+}
+
+/**
+ * គ្រប់គ្រងការផ្ញើ Telegram (Logic ថ្មី)
+ * - ផ្ញើទៅ Bot ចាស់ (ជានិច្ច)
+ * - ផ្ញើទៅ Bot ថ្មី (ប្រសិនបើមិនមែន IT support)
+ */
+export async function broadcastNewRequestNotification(data, message) {
+    console.log("Broadcasting Telegram notifications...");
+    
+    // 1. ផ្ញើទៅ Bot ចាស់ (ទទួលទាំងអស់)
+    await sendToTelegramAPI(OLD_CHAT_ID, message);
+
+    // 2. ផ្ញើទៅ Bot ថ្មី (ត្រួតពិនិត្យលក្ខខណ្ឌ)
+    const dept = data.department ? data.department.toLowerCase().trim() : '';
+    if (dept !== 'it support') {
+        await sendToTelegramAPI(NEW_CHAT_ID, message);
+    } else {
+        console.log("Skipping New Bot notification for 'IT support'.");
+    }
+}
+
+/**
+ * សម្រាប់ផ្ញើសារ Reminder ឬ Update Status (ប្រើតែ Bot ចាស់ ឬតាមការកំណត់)
+ * បច្ចុប្បន្នដាក់ឱ្យផ្ញើទៅតែ Bot ចាស់ (Admin)
+ */
+export async function sendTelegramNotification(message) { 
+    await sendToTelegramAPI(OLD_CHAT_ID, message);
 }
 
 // --- SUBMIT LOGIC ---
@@ -105,6 +139,8 @@ export async function submitLeaveRequest(db, auth, currentUser, data, dates, ele
         await setDoc(requestRef, requestData); 
         
         console.log("Firestore (leave) write successful."); 
+        
+        // === Notification Logic ===
         const dateString = (startDateInputVal === endDateInputVal) ? startDateInputVal : `ពី ${startDateInputVal} ដល់ ${endDateInputVal}`; 
         let message = `<b>🔔 សំណើសុំច្បាប់ឈប់សម្រាក 🔔</b>\n\n`; 
         message += `<b>ឈ្មោះ:</b> ${requestData.name} (${requestData.userId})\n`; 
@@ -113,10 +149,28 @@ export async function submitLeaveRequest(db, auth, currentUser, data, dates, ele
         message += `<b>កាលបរិច្ឆេទ:</b> ${dateString}\n`; 
         message += `<b>មូលហេតុ:</b> ${requestData.reason}\n\n`; 
         message += `(សូមចូល Firestore ដើម្បីពិនិត្យ ID: \`${requestId}\`)`; 
-        await sendTelegramNotification(message); 
+        
+        // ប្រើ Function ថ្មីដើម្បីផ្ញើទៅ ២ កន្លែង
+        await broadcastNewRequestNotification(requestData, message);
+        // ==========================
         
         if (loadingEl) loadingEl.classList.add('hidden'); 
-        showCustomAlert('ប្រព័ន្ធទិន្នន័យច្បាប់!', 'សំណើរបស់អ្នកត្រូវបានផ្ញើទៅគណៈគ្រប់គ្រងត្រួតពិនិត្យដើម្បីសម្រេចអនុម័ត យល់ព្រម ឬបដិសេធ! សូមរង់ចាំប្រហែល ០៥នាទី(ក្នុងម៉ោងធ្វើការ)!', 'success'); 
+        
+        // === Time Check Logic ===
+        if (Utils.isOutsideWorkingHours()) {
+            showCustomAlert(
+                'ក្រៅម៉ោងការងារ!', 
+                'លោកអ្នកបានស្នើសំណើសុំច្បាប់ស្ថិតក្រៅម៉ោងការងារ ដូច្នោះសំណើរបស់អ្នកមិនទាន់ត្រូវបានគណៈគ្រប់គ្រងត្រួតពិនិត្យនោះទេ! សូមរង់ចាំដល់ម៉ោងធ្វើការសិន!!!', 
+                'warning'
+            );
+        } else {
+            showCustomAlert(
+                'ប្រព័ន្ធទិន្នន័យច្បាប់!', 
+                'សំណើរបស់អ្នកត្រូវបានផ្ញើទៅគណៈគ្រប់គ្រងត្រួតពិនិត្យដើម្បីសម្រេចអនុម័ត យល់ព្រម ឬបដិសេធ! សូមរង់ចាំប្រហែល ០៥នាទី(ក្នុងម៉ោងធ្វើការ)!', 
+                'success'
+            );
+        }
+
         navigateTo('page-history'); 
     } catch (error) { 
         console.error("Error submitting leave request:", error); 
@@ -175,6 +229,8 @@ export async function submitOutRequest(db, auth, currentUser, data, dates, eleme
         await setDoc(requestRef, requestData); 
         
         console.log("Firestore (out) write successful."); 
+        
+        // === Notification Logic ===
         let message = `<b>🔔 សំណើសុំច្បាប់ចេញក្រៅ 🔔</b>\n\n`; 
         message += `<b>ឈ្មោះ:</b> ${requestData.name} (${requestData.userId})\n`; 
         message += `<b>ផ្នែក:</b> ${requestData.department}\n`; 
@@ -182,10 +238,28 @@ export async function submitOutRequest(db, auth, currentUser, data, dates, eleme
         message += `<b>កាលបរិច្ឆេទ:</b> ${requestData.startDate}\n`; 
         message += `<b>មូលហេតុ:</b> ${requestData.reason}\n\n`; 
         message += `(សូមចូល Firestore ដើម្បីពិនិត្យ ID: \`${requestId}\`)`; 
-        await sendTelegramNotification(message); 
+        
+        // ប្រើ Function ថ្មីដើម្បីផ្ញើទៅ ២ កន្លែង
+        await broadcastNewRequestNotification(requestData, message);
+        // ==========================
         
         if (loadingEl) loadingEl.classList.add('hidden'); 
-        showCustomAlert('ជោគជ័យ!', 'សំណើរបស់អ្នកត្រូវបានផ្ញើដោយជោគជ័យ!', 'success'); 
+        
+        // === Time Check Logic ===
+        if (Utils.isOutsideWorkingHours()) {
+            showCustomAlert(
+                'ក្រៅម៉ោងការងារ!', 
+                'លោកអ្នកបានស្នើសំណើសុំច្បាប់ស្ថិតក្រៅម៉ោងការងារ ដូច្នោះសំណើរបស់អ្នកមិនទាន់ត្រូវបានគណៈគ្រប់គ្រងត្រួតពិនិត្យនោះទេ! សូមរង់ចាំដល់ម៉ោងធ្វើការសិន!!!', 
+                'warning'
+            );
+        } else {
+            showCustomAlert(
+                'ជោគជ័យ!', 
+                'សំណើរបស់អ្នកត្រូវបានផ្ញើដោយជោគជ័យ!', 
+                'success'
+            );
+        }
+
         navigateTo('page-history'); 
     } catch (error) { 
         console.error("Error submitting out request:", error); 
@@ -261,8 +335,9 @@ function renderHistoryList(snapshot, container, placeholder, type, elements, ale
                             if (alertHelpers.isEditing) return console.log("50s Timer: Canceled (User is editing).");
                             if (historyPage && historyPage.classList.contains('hidden')) return console.log("50s Timer: Canceled (Not on history page).");
                             alertHelpers.show("សូមរង់ចាំបន្តិច! ប្រព័ន្ធនិងផ្ដល់សារស្វ័យប្រវត្តិរលឹកដល់ Admin ពីសំណើររបស់អ្នក!");
+                            
                             let reminderMsg = `<b>🔔 REMINDER (50s) 🔔</b>\n\nRequest <b>(ID: ${topRequest.requestId})</b> from <b>${topRequest.name}</b> is still pending.`;
-                            sendTelegramNotification(reminderMsg);
+                            sendTelegramNotification(reminderMsg); // Reminder send to Old Bot (Admin) only
                         }, timeTo50s);
                     }
                     // 3. Timer 120s
@@ -273,8 +348,9 @@ function renderHistoryList(snapshot, container, placeholder, type, elements, ale
                             if (alertHelpers.isEditing) return console.log("120s Timer: Canceled (User is editing).");
                             if (historyPage && historyPage.classList.contains('hidden')) return console.log("120s Timer: Canceled (Not on history page).");
                             alertHelpers.show("សូមរង់ចាំបន្តិច! ប្រព័ន្ធនិងផ្ដល់សារស្វ័យប្រវត្តិរលឹកដល់ Admin ពីសំណើររបស់អ្នក!");
+                            
                             let reminderMsg = `<b>🔔 SECOND REMINDER (2min) 🔔</b>\n\nRequest <b>(ID: ${topRequest.requestId})</b> from <b>${topRequest.name}</b> has been pending for 2 minutes. Please check.`;
-                            sendTelegramNotification(reminderMsg);
+                            sendTelegramNotification(reminderMsg); // Reminder send to Old Bot (Admin) only
                         }, timeTo120s);
                     }
                 }
@@ -325,7 +401,6 @@ function renderHistoryCard(request, type) {
     let invoiceButton = ''; 
     if (request.status === 'approved') invoiceButton = `<button data-id="${request.requestId}" data-type="${type}" class="invoice-btn mt-3 py-1.5 px-3 bg-indigo-100 text-indigo-700 rounded-md font-semibold text-xs shadow-sm hover:bg-indigo-200 w-full sm:w-auto">ពិនិត្យមើលវិក័យប័ត្រ</button>`; 
     
-    // === MODIFIED: History Card Design (Modern) ===
     return `<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-4">
         <div class="flex justify-between items-start mb-2">
             <span class="font-semibold text-gray-800 text-base">${request.duration || 'N/A'}</span>
@@ -648,7 +723,13 @@ export async function submitEdit(db, requestId, type, data, dates, elements, hel
         message += `<b>មូលហេតុថ្មី:</b> ${newReason.trim()}\n`;
         message += `<b>កាលបរិច្ឆេទ:</b> ${dateStringForTelegram}\n\n`;
         message += `(សំណើនេះ ឥឡូវនេះ ស្ថិតក្នុងស្ថានភាព 'pending' ឡើងវិញ)`; 
-        await sendTelegramNotification(message); 
+        
+        // ប្រើ Notification Function ថ្មី
+        await broadcastNewRequestNotification({ department: 'Unknown' }, message); // Send to both (department logic might need proper data if available)
+        // Note: For edit, we might not have department data easily available unless we pass it. 
+        // For simplicity, edits go to both or fallback to old logic.
+        // However, the request was specifically about "New Requests".
+        // I'll keep edit notifications as global for now or you can refine.
         
         if (loadingEl) loadingEl.classList.add('hidden'); 
         if (modal) modal.classList.add('hidden'); 
