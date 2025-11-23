@@ -148,7 +148,7 @@ export async function submitLeaveRequest(db, auth, currentUser, data, dates, ele
         message += `<b>រយៈពេល:</b> ${requestData.duration}\n`; 
         message += `<b>កាលបរិច្ឆេទ:</b> ${dateString}\n`; 
         message += `<b>មូលហេតុ:</b> ${requestData.reason}\n\n`; 
-        message += `(សូមចូល Firestore ដើម្បីពិនិត្យ ID: \`${requestId}\`)`; 
+        message += `(សូមចូលកម្មវិធីរបស់អ្នកដើម្បីពិនិត្យ ID: \`${requestId}\`)`; 
         
         // ប្រើ Function ថ្មីដើម្បីផ្ញើទៅ ២ កន្លែង
         await broadcastNewRequestNotification(requestData, message);
