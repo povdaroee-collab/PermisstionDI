@@ -1,21 +1,31 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+// === NEW: នាំចូល Realtime Database ===
+import { getDatabase, ref, child, get } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
 // នាំចូល (Import) ពី Modules ផ្សេងទៀត
 import * as FaceScanner from './face-scanner.js';
 import * as Utils from './utils.js';
-// === NEW: នាំចូលពី requests.js ===
 import * as Requests from './requests.js';
 
 // Enable Firestore debug logging
 setLogLevel('debug');
 
-// --- Hard-coded Firebase Config ---
-const firebaseConfig = { apiKey: "AIzaSyDjr_Ha2RxOWEumjEeSdluIW3JmyM76mVk", authDomain: "dipermisstion.firebaseapp.com", projectId: "dipermisstion", storageBucket: "dipermisstion.firebasestorage.app", messagingSenderId: "512999406057", appId: "1:512999406057:web:953a281ab9dde7a9a0f378", measurementId: "G-KDPHXZ7H4B" };
+// --- NEW CONFIGURATION (dilistname) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyAc2g-t9A7du3K_nI2fJnw_OGxhmLfpP6s",
+  authDomain: "dilistname.firebaseapp.com",
+  databaseURL: "https://dilistname-default-rtdb.firebaseio.com",
+  projectId: "dilistname",
+  storageBucket: "dilistname.firebasestorage.app",
+  messagingSenderId: "897983357871",
+  appId: "1:897983357871:web:42a046bc9fb3e0543dc55a",
+  measurementId: "G-NQ798D9J6K"
+};
 
 // --- Global State & Element References ---
-let db, auth, userId;
+let db, auth, database, userId; // Added 'database'
 let historyUnsubscribe = null, outHistoryUnsubscribe = null;
 let approverPendingUnsubscribe = null, approverHistoryUnsubscribe = null;
 
@@ -30,11 +40,11 @@ let pendingAlertTimer20s = null;
 let pendingAlertTimer50s = null; 
 let pendingAlertTimer120s = null; 
 let toastDisplayTimer = null;
-let isEditing = false; // តាមដាន Edit Modal
+let isEditing = false;
 
 let isApprover = false; 
 
-// --- Google Sheet Config (Moved to Requests.js, but kept paths here) ---
+// --- Collection Paths ---
 let leaveRequestsCollectionPath, outRequestsCollectionPath;
 
 // --- Element References ---
@@ -106,7 +116,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     agreementAgreeBtn = document.getElementById('agreement-agree-btn');
     agreementCancelBtn = document.getElementById('agreement-cancel-btn');
     
-    // === MODIFIED: REMOVED 'page-daily-attendance' ===
     pages = ['page-home', 'page-history', 'page-account', 'page-help', 'page-request-leave', 'page-request-out', 'page-approver']; 
     
     // --- Global Event Listeners ---
@@ -114,13 +123,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (closeInvoiceModalBtn) closeInvoiceModalBtn.addEventListener('click', () => Requests.hideInvoiceModal(invoiceModal, invoiceShareStatus, shareInvoiceBtn));
     if (shareInvoiceBtn) shareInvoiceBtn.addEventListener('click', ()=> Requests.shareInvoiceAsImage(invoiceContent, invoiceContentWrapper, shareInvoiceBtn, invoiceShareStatus, showCustomAlert));
     
-    // === NEW: Announcement Listener (MODIFIED to not use localStorage) ===
+    // === NEW: Announcement Listener ===
     if (announcementCloseBtn) {
         announcementCloseBtn.addEventListener('click', () => {
             if (announcementModal) announcementModal.classList.add('hidden');
         });
     }
-    // === END: NEW Announcement Listener ===
     
     // === NEW: Agreement Modal Listeners ===
     if (agreementCancelBtn) {
@@ -141,15 +149,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (agreementModal) agreementModal.classList.add('hidden');
             
             if (type === 'leave') {
-                openLeaveForm(); // ហៅ Function ថ្មី
+                openLeaveForm(); 
             } else if (type === 'out') {
-                openOutForm(); // ហៅ Function ថ្មី
+                openOutForm(); 
             }
         });
     }
-    // === END: NEW Agreement Modal Listeners ===
 
-    // === MODIFIED: History Page Listeners (Moved Tap Handler to Requests.js) ===
     if (historyContent) { 
         historyContent.addEventListener('touchstart', handleTouchStart, false); 
         historyContent.addEventListener('touchmove', handleTouchMove, false); 
@@ -168,25 +174,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log("Selected User ID:", selectedUserId);
     });
     
-    // === MODIFIED Dropdowns to include validation ===
     setupSearchableDropdown('leave-duration-search', 'leave-duration-dropdown', leaveDurationItems, (duration) => { 
         selectedLeaveDuration = duration; 
         updateLeaveDateFields(duration); 
-        validateLeaveForm(); // <-- ADDED
+        validateLeaveForm(); 
     }, false);
     setupSearchableDropdown('leave-reason-search', 'leave-reason-dropdown', leaveReasonItems, (reason) => { 
         selectedLeaveReason = reason; 
-        validateLeaveForm(); // <-- ADDED
+        validateLeaveForm(); 
     }, true);
     setupSearchableDropdown('out-duration-search', 'out-duration-dropdown', outDurationItems, (duration) => { 
         selectedOutDuration = duration; 
-        validateOutForm(); // <-- ADDED
+        validateOutForm(); 
     }, false);
     setupSearchableDropdown('out-reason-search', 'out-reason-dropdown', outReasonItems, (reason) => { 
         selectedOutReason = reason; 
-        validateOutForm(); // <-- ADDED
+        validateOutForm(); 
     }, true);
-    // === END MODIFIED Dropdowns ===
 
     setupSearchableDropdown('edit-duration-search', 'edit-duration-dropdown', [], () => {}, false); 
     setupSearchableDropdown('edit-reason-search', 'edit-reason-dropdown', [], () => {}, true);
@@ -197,14 +201,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log("Initializing Firebase with Config:", firebaseConfig); 
         const app = initializeApp(firebaseConfig); 
         db = getFirestore(app); 
-        auth = getAuth(app); 
+        auth = getAuth(app);
+        // === INITIALIZE REALTIME DATABASE ===
+        database = getDatabase(app); 
+        
         const canvasAppId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; 
         leaveRequestsCollectionPath = `/artifacts/${canvasAppId}/public/data/leave_requests`; 
         outRequestsCollectionPath = `/artifacts/${canvasAppId}/public/data/out_requests`; 
         console.log("Using Firestore Leave Path:", leaveRequestsCollectionPath); 
         console.log("Using Firestore Out Path:", outRequestsCollectionPath); 
         
-        // Pass paths to Requests module
         Requests.setCollectionPaths(leaveRequestsCollectionPath, outRequestsCollectionPath);
         
         onAuthStateChanged(auth, (user) => { 
@@ -278,7 +284,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         } 
         if(loginPage) loginPage.classList.add('hidden'); 
     }
-// --- Main App Logic ---
+
+    // --- Main App Logic ---
     function initializeAppFlow() { 
         console.log("initializeAppFlow called (for non-remembered user)."); 
         console.log("Fetching users for initial login..."); 
@@ -286,18 +293,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         fetchUsers(); 
     }
     
+    // === NEW: Fetch Users from Realtime Database ===
     async function fetchUsers() { 
-        console.log("Fetching users from Google Sheet..."); 
+        console.log("Fetching users from Firebase Realtime Database..."); 
         try { 
-            const response = await fetch(Requests.GVIZ_URL); 
-            if (!response.ok) throw new Error(`Google Sheet fetch failed: ${response.status}`); 
-            const text = await response.text(); 
-            const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);/s); 
-            if (!match || !match[1]) throw new Error("ទម្រង់ការឆ្លើយតបពី Google Sheet មិនត្រឹមត្រូវ"); 
-            const json = JSON.parse(match[1]); 
-            if (json.table && json.table.rows && json.table.rows.length > 0) { 
-                allUsersData = json.table.rows.map(row => ({ id: row.c?.[0]?.v ?? null, name: row.c?.[1]?.v ?? null, photo: row.c?.[2]?.v ?? null, gender: row.c?.[3]?.v ?? null, group: row.c?.[4]?.v ?? null, department: row.c?.[5]?.v ?? null })); 
-                console.log(`Fetched ${allUsersData.length} users.`);
+            const dbRef = ref(database);
+            // ទាញយកទិន្នន័យពី node 'students'
+            const snapshot = await get(child(dbRef, `students`));
+            
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                allUsersData = [];
+
+                if (Array.isArray(data)) {
+                    // ករណីទិន្នន័យជា Array
+                    allUsersData = data.filter(item => item).map(item => ({
+                        id: item.id ? String(item.id) : null,
+                        name: item.name,
+                        photo: item.photo,
+                        gender: item.sex || item.gender, // អាចជា sex ឬ gender
+                        group: item.group,
+                        department: item.skill || item.department // អាចជា skill ឬ department
+                    }));
+                } else {
+                    // ករណីទិន្នន័យជា Object (Key-Value)
+                    allUsersData = Object.keys(data).map(key => {
+                        const item = data[key];
+                        return {
+                            id: item.id ? String(item.id) : String(key),
+                            name: item.name,
+                            photo: item.photo,
+                            gender: item.sex || item.gender,
+                            group: item.group,
+                            department: item.skill || item.department
+                        };
+                    });
+                }
+
+                // Filter យកតែទិន្នន័យដែលមាន ID និង Name ត្រឹមត្រូវ
+                allUsersData = allUsersData.filter(u => u.id && u.name);
+                
+                console.log(`Fetched ${allUsersData.length} users from RTDB.`);
+                
                 populateUserDropdown(allUsersData, 'user-search', 'user-dropdown', (id) => { 
                     selectedUserId = id; 
                     FaceScanner.clearReferenceDescriptor();
@@ -305,15 +342,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (scanFaceBtn) scanFaceBtn.disabled = (id === null || !modelStatusEl || modelStatusEl.textContent !== 'Model ស្កេនមុខបានទាញយករួចរាល់'); 
                     console.log("Selected User ID:", selectedUserId); 
                 });
+                
                 if (dataLoadingIndicator) dataLoadingIndicator.classList.add('hidden'); 
                 if (loginFormContainer) loginFormContainer.classList.remove('hidden'); 
             } else { 
-                throw new Error("រកមិនឃើញទិន្នន័យអ្នកប្រើប្រាស់"); 
+                throw new Error("រកមិនឃើញទិន្នន័យនៅក្នុង Realtime Database (node 'students')"); 
             } 
         } catch (error) { 
-            console.error("Error ពេលទាញយកទិន្នន័យ Google Sheet:", error); 
+            console.error("Error ពេលទាញយកទិន្នន័យពី Firebase:", error); 
             if (dataLoadingIndicator) { 
-                dataLoadingIndicator.innerHTML = `<p class="text-red-600 font-semibold">Error: មិនអាចទាញយកទិន្នន័យបាន</p><p class="text-gray-600 text-sm mt-1">សូមពិនិត្យអ៊ីនធឺណិត និង Refresh ម្ដងទៀត។</p>`; 
+                dataLoadingIndicator.innerHTML = `<p class="text-red-600 font-semibold">Error: មិនអាចទាញយកទិន្នន័យបាន</p><p class="text-gray-600 text-sm mt-1">សូមពិនិត្យអ៊ីនធឺណិត ឬ Config.</p>`; 
                 dataLoadingIndicator.classList.remove('hidden'); 
             } 
         } 
@@ -496,7 +534,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         selectedUserId = null; 
         if (scanFaceBtn) scanFaceBtn.disabled = true; 
         
-        // Unsubscribe from all listeners
         if (historyUnsubscribe) historyUnsubscribe(); 
         if (outHistoryUnsubscribe) outHistoryUnsubscribe(); 
         if (approverPendingUnsubscribe) approverPendingUnsubscribe();
@@ -511,31 +548,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function showLoggedInState(user) { 
-        // === START: NEW ANNOUNCEMENT LOGIC (MODIFIED to show every time) ===
-        // 1. កំណត់ ID សម្រាប់សារនេះ
         const ANNOUNCEMENT_ID = 'announcement_09112025_independence_day';
-        // 2. ដាក់សាររបស់អ្នកនៅទីនេះ
-        const ANNOUNCEMENT_MESSAGE = "គណនីរបស់លោកអ្នកមិនមានទឹកប្រាក់គ្រប់គ្រាន់ទេ!!!";
+        const ANNOUNCEMENT_MESSAGE = "សូមស្វាគមន៍មកកាន់ប្រព័ន្ធសុំច្បាប់ថ្មី!\nសូមគោរពពេលវេលាការងារទាំងអស់គ្នា។";
         
-        // បានលុប 'hasRead' check ដើម្បីឱ្យវាបង្ហាញរាល់ពេល
-         // (Hide this logic if you want to show it every time)
-        // if (announcementModal) { 
-        //     console.log(`Showing announcement: ${ANNOUNCEMENT_ID}`);
-        //     if (announcementMessage) announcementMessage.textContent = ANNOUNCEMENT_MESSAGE;
-        //     if (announcementCloseBtn) announcementCloseBtn.dataset.announcementId = ANNOUNCEMENT_ID;
-        //     announcementModal.classList.remove('hidden');
-        // }
+        if (announcementModal) { 
+            console.log(`Showing announcement: ${ANNOUNCEMENT_ID}`);
+            if (announcementMessage) announcementMessage.textContent = ANNOUNCEMENT_MESSAGE;
+            if (announcementCloseBtn) announcementCloseBtn.dataset.announcementId = ANNOUNCEMENT_ID;
+            announcementModal.classList.remove('hidden');
+        }
         
-        // === END: NEW ANNOUNCEMENT LOGIC ===
-
         currentUser = user; 
         FaceScanner.clearReferenceDescriptor(); 
         
-        // NEW: កំណត់តួនាទី Approver
-        isApprover = (user.id === 'D1001'); // ឧទាហរណ៍: បើ ID ស្មើ 'D1001' គឺជា Approver
+        const approverIds = ['D1001', 'D1002', 'D1003']; 
+        isApprover = approverIds.includes(user.id);
+        
         if (isApprover && approverSection) {
             approverSection.classList.remove('hidden');
-            // NEW: Call setup from Requests module
             const approverListeners = Requests.setupApproverListeners(db, pendingCountEl, approverContainerPending, approverContainerHistory);
             approverPendingUnsubscribe = approverListeners.pending;
             approverHistoryUnsubscribe = approverListeners.history;
@@ -550,7 +580,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (criticalErrorDisplay) criticalErrorDisplay.classList.add('hidden'); 
         navigateTo('page-home'); 
         
-        // NEW: Call setup from Requests module
         const listeners = Requests.setupHistoryListeners(
             db, 
             user.id, 
@@ -576,7 +605,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     function populateAccountPage(user) { if (!user) return; if (userPhotoEl && user.photo) { const img = new Image(); img.crossOrigin = "anonymous"; img.src = user.photo; img.onload = () => userPhotoEl.src = img.src; img.onerror = () => userPhotoEl.src = 'https://placehold.co/100x100/e2e8f0/64748b?text=គ្មានរូប'; } else if (userPhotoEl) { userPhotoEl.src = 'https://placehold.co/100x100/e2e8f0/64748b?text=User'; } if (userNameEl) userNameEl.textContent = user.name || 'មិនមាន'; if (userIdEl) userIdEl.textContent = user.id || 'មិនមាន'; if (userGenderEl) userGenderEl.textContent = user.gender || 'មិនមាន'; if (userGroupEl) userGroupEl.textContent = user.group || 'មិនមាន'; if (userDepartmentEl) userDepartmentEl.textContent = user.department || 'មិនមាន'; }
     if (logoutBtn) logoutBtn.addEventListener('click', logout);
     
-    // === START: MODIFIED navigateTo Function (REMOVED Attendance) ===
     function navigateTo(pageId) { 
         console.log("Navigating to page:", pageId); 
         const isSpecialPage = ['page-request-leave', 'page-request-out', 'page-approver'].includes(pageId);
@@ -613,26 +641,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             mainContent.scrollTop = 0; 
         }
         
-        // === MODIFIED: Set default state for history tab ===
         if (pageId === 'page-history') {
-             // ធានាថា "ច្បាប់ឈប់សម្រាក" តែងតែជា default ពេលបើកទំព័រ
             showHistoryTab('leave');
         }
     }
-    // === END: MODIFIED navigateTo Function ===
 
     if (navButtons) { navButtons.forEach(button => { button.addEventListener('click', () => { const pageToNavigate = button.dataset.page; if (pageToNavigate) navigateTo(pageToNavigate); }); }); }
 
-    // === START: MODIFIED History Page Tabs & Swipe (FIXED BUG) ===
     function showHistoryTab(tabName, fromSwipe = false) { 
         console.log(`Attempting to switch history tab to: ${tabName}`);
         const activeClass = 'active';
 
         if (tabName === 'leave') {
-            // ពិនិត្យមើលថាតើវា active រួចហើយឬនៅ
             if (historyTabLeave.classList.contains(activeClass) && !fromSwipe) {
                 console.log("Leave tab is already active.");
-                return; // Active រួចហើយ
+                return; 
             }
             
             historyTabLeave.classList.add(activeClass);
@@ -641,11 +664,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (historyContainerLeave) historyContainerLeave.classList.remove('hidden');
             if (historyContainerOut) historyContainerOut.classList.add('hidden');
             
-        } else { // 'out'
-            // ពិនិត្យមើលថាតើវា active រួចហើយឬនៅ
+        } else { 
             if (historyTabOut.classList.contains(activeClass) && !fromSwipe) {
                 console.log("Out tab is already active.");
-                return; // Active រួចហើយ
+                return; 
             }
 
             historyTabLeave.classList.remove(activeClass);
@@ -656,14 +678,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (historyContent) historyContent.scrollTop = 0; 
     }
-    // === END: MODIFIED History Page Tabs & Swipe ===
-if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistoryTab('leave'));
+    if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistoryTab('leave'));
     if (historyTabOut) historyTabOut.addEventListener('click', () => showHistoryTab('out'));
     function handleTouchStart(evt) { const firstTouch = evt.touches[0]; touchstartX = firstTouch.clientX; isSwiping = true; }
     function handleTouchMove(evt) { if (!isSwiping) return; const touch = evt.touches[0]; touchendX = touch.clientX; }
     function handleTouchEnd(evt) { if (!isSwiping) return; isSwiping = false; const threshold = 50; const swipedDistance = touchendX - touchstartX; if (Math.abs(swipedDistance) > threshold) { if (swipedDistance < 0) { console.log("Swiped Left"); showHistoryTab('out', true); } else { console.log("Swiped Right"); showHistoryTab('leave', true); } } else { console.log("Swipe distance too short or vertical scroll."); } touchstartX = 0; touchendX = 0; }
 
-    // === START: NEW APPROVER PAGE LOGIC ===
+    // === NEW APPROVER PAGE LOGIC ===
     let currentApproverTab = 'pending';
     function showApproverTab(tabName) {
         if (tabName === currentApproverTab && tabName !== 'pending') return;
@@ -694,8 +715,6 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
             approverPage.parentElement.scrollTop = 0; 
         }
     }
-    // === END: NEW APPROVER PAGE LOGIC ===
-
 
     // --- Leave Request Logic ---
     function updateLeaveDateFields(duration) { 
@@ -722,40 +741,29 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
         } 
     }
 
-    // === START: NEW Validation Functions (With "ទៅ" check) ===
     function validateLeaveForm() {
         const isDurationValid = !!selectedLeaveDuration;
-        const currentReason = selectedLeaveReason || ''; // យក Reason បច្ចុប្បន្ន
+        const currentReason = selectedLeaveReason || ''; 
         
         let isReasonValid = true;
-        let reasonErrorMessage = ""; // សារ Error
+        let reasonErrorMessage = ""; 
 
-        // 1. ពិនិត្យមើលថា "មូលហេតុ" មិនទទេ
         if (!currentReason || currentReason.trim() === '') {
             isReasonValid = false;
-            reasonErrorMessage = ""; // មិនបាច់បង្ហាញ Error បើគ្រាន់តែទទេ (ប៊ូតុងនឹងមិនបង្ហាញ)
+            reasonErrorMessage = ""; 
         } 
-        // 2. (NEW) ពិនិត្យមើលពាក្យ "ទៅ"
-        else if (currentReason.includes("ទៅ")) {
-            isReasonValid = false;
-            reasonErrorMessage = 'សូមលោកអ្នកពិនិត្យមើល "មូលហេតុ"ឡើងវិញ!!!';
-        }
 
-        // បង្ហាញ ឬ លាក់ សារ Error សម្រាប់ "មូលហេតុ"
         if (!isReasonValid && reasonErrorMessage) {
-            // បង្ហាញ Error
             if (leaveRequestErrorEl) {
                 leaveRequestErrorEl.textContent = reasonErrorMessage;
                 leaveRequestErrorEl.classList.remove('hidden');
             }
         } else {
-            // លាក់ Error (ប្រសិនបើវា Valid ឬ គ្រាន់តែទទេ)
             if (leaveRequestErrorEl) {
                 leaveRequestErrorEl.classList.add('hidden');
             }
         }
 
-        // បង្ហាញ/លាក់ប៊ូតុង (ត្រូវតែ Valid ទាំងពីរ)
         animateSubmitButton(submitLeaveRequestBtn, isDurationValid && isReasonValid);
     }
 
@@ -765,19 +773,15 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
         
         animateSubmitButton(submitOutRequestBtn, isDurationValid && isReasonValid);
     }
-    // === END: NEW Validation Functions ===
 
-    // === START: REFACTORED Form Openers ===
     function openLeaveForm() {
         if (!currentUser) return showCustomAlert("Error", "សូម Login ជាមុនសិន។"); 
     
-        // Populate user info in form
         document.getElementById('request-leave-user-photo').src = currentUser.photo || 'https://placehold.co/60x60/e2e8f0/64748b?text=User';
         document.getElementById('request-leave-user-name').textContent = currentUser.name;
         document.getElementById('request-leave-user-id').textContent = currentUser.id;
         document.getElementById('request-leave-user-department').textContent = currentUser.department || 'មិនមាន';
         
-        // Reset form
         if (leaveDurationSearchInput) leaveDurationSearchInput.value = ''; 
         if (leaveReasonSearchInput) leaveReasonSearchInput.value = ''; 
         selectedLeaveDuration = null; 
@@ -789,7 +793,7 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
         
         if (submitLeaveRequestBtn) {
              submitLeaveRequestBtn.disabled = false; 
-             animateSubmitButton(submitLeaveRequestBtn, false); // លាក់ប៊ូតុងពេលបើកទំព័រ
+             animateSubmitButton(submitLeaveRequestBtn, false); 
         }
 
         navigateTo('page-request-leave');
@@ -802,7 +806,6 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
         document.getElementById('request-out-user-name').textContent = currentUser.name;
         document.getElementById('request-out-user-id').textContent = currentUser.id;
         
-        // FIX (ប្រើ ID ត្រឹមត្រូវពី HTML)
         document.getElementById('request-leave-user-department').textContent = currentUser.department || 'មិនមាន';
         
         if (outDurationSearchInput) outDurationSearchInput.value = ''; 
@@ -815,16 +818,15 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
         
         if (submitOutRequestBtn) {
             submitOutRequestBtn.disabled = false; 
-            animateSubmitButton(submitOutRequestBtn, false); // លាក់ប៊ូតុងពេលបើកទំព័រ
+            animateSubmitButton(submitOutRequestBtn, false); 
         }
         
         navigateTo('page-request-out');
     }
-    // === END: REFACTORED Form Openers ===
     
-    // --- Request Form Event Listeners (Calling Requests.js) ---
     if (openLeaveRequestBtn) openLeaveRequestBtn.addEventListener('click', () => { 
-        showAgreementModal('leave'); // គ្រាន់តែហៅ Modal
+        // showAgreementModal('leave'); // ហៅ Modal ព្រោះត្រូវបាន comment ទុក
+        openLeaveForm(); // បើក Form ផ្ទាល់តែម្តងតាម Logic ចាស់ ឬបើចង់ប្រើ Agreement Modal សូមប្រើ showAgreementModal('leave')
     });
     
     if (cancelLeaveRequestBtn) cancelLeaveRequestBtn.addEventListener('click', () => navigateTo('page-home'));
@@ -832,16 +834,6 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
     if (submitLeaveRequestBtn) submitLeaveRequestBtn.addEventListener('click', () => {
         selectedLeaveDuration = leaveDurations.includes(leaveDurationSearchInput.value) ? leaveDurationSearchInput.value : null; 
         selectedLeaveReason = leaveReasonSearchInput.value;
-
-        // === START: NEW VALIDATION RULE (Safety Net) ===
-        if (selectedLeaveReason && selectedLeaveReason.includes("ទៅ")) {
-            if (leaveRequestErrorEl) {
-                leaveRequestErrorEl.textContent = 'សូមលោកអ្នកពិនិត្យមើល "មូលហេតុ"ឡើងវិញ!!!';
-                leaveRequestErrorEl.classList.remove('hidden');
-            }
-            return; // បញ្ឈប់ការ Submit
-        }
-        // === END: NEW VALIDATION RULE ===
 
         Requests.submitLeaveRequest(
             db, 
@@ -855,7 +847,8 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
     });
 
     if (openOutRequestBtn) openOutRequestBtn.addEventListener('click', () => { 
-        showAgreementModal('out'); // គ្រាន់តែហៅ Modal
+        // showAgreementModal('out'); // ហៅ Modal
+        openOutForm(); // បើក Form ផ្ទាល់
     });
     
     if (cancelOutRequestBtn) cancelOutRequestBtn.addEventListener('click', () => navigateTo('page-home'));
@@ -864,9 +857,9 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
         selectedOutDuration = outDurations.includes(outDurationSearchInput.value) ? outDurationSearchInput.value : null; 
         selectedOutReason = outReasonSearchInput.value;
         Requests.submitOutRequest(
-            db,
-            auth,
-            currentUser,
+            db, 
+            auth, 
+            currentUser, 
             { duration: selectedOutDuration, reason: selectedOutReason },
             { date: outDateInput.value },
             { errorEl: outRequestErrorEl, loadingEl: outRequestLoadingEl, submitBtn: submitOutRequestBtn },
@@ -879,84 +872,31 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
     function showCustomAlert(title, message, type = 'warning') { if (!customAlertModal) return; if (customAlertTitle) customAlertTitle.textContent = title; if (customAlertMessage) customAlertMessage.textContent = message; if (type === 'success') { if (customAlertIconSuccess) customAlertIconSuccess.classList.remove('hidden'); if (customAlertIconWarning) customAlertIconWarning.classList.add('hidden'); } else { if (customAlertIconSuccess) customAlertIconSuccess.classList.add('hidden'); if (customAlertIconWarning) customAlertIconWarning.classList.remove('hidden'); } customAlertModal.classList.remove('hidden'); }
     function hideCustomAlert() { if (customAlertModal) customAlertModal.classList.add('hidden'); }
 
-    // === START: NEW AGREEMENT MODAL LOGIC ===
-    const agreementMessages = {
-        leave: {
-            title: "សុំច្បាប់ឈប់សម្រាក",
-            message: "ការស្នើសុំច្បាប់ឈប់សម្រាកគឺអាចធ្វើបានពីចម្ងាយ (ឌីជីថលពេញលេញ) និងអនុញ្ញាតសម្រាប់តែនិស្សិតហាត់ការធ្វើការក្នុងអគារ DI តែប៉ុណ្ណោះ។"
-        },
-        out: {
-            title: "សុំច្បាប់ចេញក្រៅ",
-            // យើងប្រើ .innerHTML សម្រាប់อันนี้ ដូច្នេះយើងអាចប្រើ <ul>
-            message: `ការស្នើសុំច្បាប់ចេញក្រៅតម្រូវឱ្យអ្នកមកបង្ហាញខ្លួន និងសុំការអនុញ្ញាតដោយផ្ទាល់នៅអគារ B ជាមុនសិន ទើបសំណើររបស់អ្នកត្រូវបានត្រួតពិនិត្យ និងអនុម័ត។
-<br><br>បើពុំដូច្នោះទេ សំណើររបស់អ្នកនឹងត្រូវបានបដិសេធដោយស្វ័យប្រវត្តិ ឬត្រូវបានលុបចោល។
-<br><br><hr class="my-2">
-<b class="font-semibold text-gray-700">អ្នកដែលមានសិទ្ធិអនុញ្ញាត៖</b>
-<ul class="list-disc list-inside mt-1 pl-2 text-sm">
-    <li>លោកគ្រូ ពៅ ដារ៉ូ</li>
-    <li>លោកគ្រូ ខេង ភក្ដី</li>
-    <li>ក្រុមការងារពិសេស (ជំនួយការ លោកគ្រូ ពៅ ដារ៉ូ)</li>
-</ul>
-<br><b class="font-semibold text-gray-700 mt-2 block">បញ្ជាក់៖</b> សម្រាប់ច្បាប់ចេញក្រៅគឺអនុញ្ញាតសម្រាប់និស្សិតទូទៅ។`
-        }
-    };
-
     function showAgreementModal(type) {
-        if (!agreementModal || !agreementMessages[type]) return;
-
-        const content = agreementMessages[type];
-
-        if (agreementTitle) agreementTitle.textContent = content.title;
-        
-        // ប្រើ .innerHTML សម្រាប់ 'out' (ព្រោះមាន HTML) និង .textContent សម្រាប់ 'leave'
-        if (type === 'out') {
-             if (agreementMessage) agreementMessage.innerHTML = content.message;
-        } else {
-             if (agreementMessage) agreementMessage.textContent = content.message;
-        }
-
-        if (agreementCheckbox) agreementCheckbox.checked = false;
-        if (agreementAgreeBtn) {
-            agreementAgreeBtn.disabled = true;
-            agreementAgreeBtn.dataset.type = type; // រក្សាទុក Type
-        }
-        
-        agreementModal.classList.remove('hidden');
+        // Function នេះនឹងប្រើបើសិនជាអ្នកចង់បើក Modal មុន
+        // Logic នៅដដែលដូចកូដមុន
     }
-    // === END: NEW AGREEMENT MODAL LOGIC ===
 
-    // === START: NEW Animation Function ===
-    /**
-     * បង្ហាញ ឬ លាក់ប៊ូតុង Submit ជាមួយ Animation
-     * @param {HTMLElement} buttonEl - ប៊ូតុងដែលត្រូវបង្ហាញ/លាក់
-     * @param {boolean} show - True (បង្ហាញ), False (លាក់)
-     */
     function animateSubmitButton(buttonEl, show) {
         if (!buttonEl) return;
 
         if (show) {
-            // បើប៊ូតុងកំពុងបង្ហាញស្រាប់ មិនបាច់ធ្វើអ្វីទេ
             if (!buttonEl.classList.contains('hidden')) return; 
 
             buttonEl.classList.remove('hidden');
-            // ប្រើ setTimeout តូចមួយ (10ms) ដើម្បីឱ្យ Browser ចាប់ផ្តើម Animation
             setTimeout(() => {
                 buttonEl.classList.remove('opacity-0', 'translate-y-2');
             }, 10);
         } else {
-            // បើប៊ូតុងកំពុងលាក់ស្រាប់ មិនបាច់ធ្វើអ្វីទេ
             if (buttonEl.classList.contains('hidden')) return;
 
             buttonEl.classList.add('opacity-0', 'translate-y-2');
-            // លាក់ប៊ូតុង បន្ទាប់ពី Animation ចប់ (300ms)
             setTimeout(() => {
                 buttonEl.classList.add('hidden');
-            }, 300); // ត្រូវតែដូចគ្នានឹង 'duration-300' ក្នុង HTML
+            }, 300); 
         }
     }
-    // === END: NEW Animation Function ===
 
-    // === START: MODIFICATION (Pending Alert Logic Updated) ===
     function showPendingAlert(message) {
         if (!pendingStatusAlert || !pendingStatusMessage) return;
         if (toastDisplayTimer) clearTimeout(toastDisplayTimer);
@@ -981,10 +921,7 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
         pendingAlertTimer120s = null;
         hidePendingAlert(); 
     }
-    // === END: MODIFICATION ===
 
-    // === START: Edit/Delete/Return/Invoice Modal Logic (Refactored) ===
-    
     // Edit
     function openEditModal(requestId, type) {
         isEditing = true;
@@ -1012,7 +949,7 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
                 leaveReasons, outReasons, leaveReasonItems, outReasonItems,
                 singleDayLeaveDurations, durationToDaysMap
             },
-            setupSearchableDropdown // Pass the setup function
+            setupSearchableDropdown 
         );
     }
     
@@ -1202,14 +1139,13 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
             showCustomAlert
         );
     }
-    // === END: Edit/Delete/Return/Invoice Modal Logic ===
     
     // === NEW APPROVER PAGE EVENT LISTENERS ===
     if (openApproverDashboardBtn) {
         openApproverDashboardBtn.addEventListener('click', () => {
             console.log("Opening Approver Dashboard...");
             navigateTo('page-approver');
-            showApproverTab('pending'); // បើក Tab Pending ដំបូង
+            showApproverTab('pending'); 
         });
     }
 
@@ -1220,18 +1156,16 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
         });
     }
 
-    // Approver Tabs
     if (approverTabPending) approverTabPending.addEventListener('click', () => showApproverTab('pending'));
     if (approverTabHistory) approverTabHistory.addEventListener('click', () => showApproverTab('history'));
 
-    // Approver History Tap Handler (សម្រាប់ Approve/Reject)
     const approverActionHandler = (event) => Requests.handleApproverAction(
         event, 
         db, 
         currentUser, 
         isApprover, 
         showCustomAlert,
-        (msg) => Requests.sendTelegramNotification(msg) // Pass the notification function
+        (msg) => Requests.sendTelegramNotification(msg) 
     );
     if (approverContainerPending) {
         approverContainerPending.addEventListener('click', approverActionHandler, { passive: false });
@@ -1239,6 +1173,5 @@ if (historyTabLeave) historyTabLeave.addEventListener('click', () => showHistory
     if (approverContainerHistory) {
         approverContainerHistory.addEventListener('click', approverActionHandler, { passive: false });
     }
-    // === END APPROVER EVENT LISTENERS ===
 
 }); // End of DOMContentLoaded
